@@ -53,7 +53,6 @@ make up        # Start the application
 make down      # Stop the application
 make logs      # View logs
 make clean     # Remove everything (containers, images, volumes)
-```
 
 ## 📦 Manual Installation
 
