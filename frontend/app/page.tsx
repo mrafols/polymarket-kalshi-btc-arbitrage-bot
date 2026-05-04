@@ -58,9 +58,11 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date())
 
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
+
   const fetchData = async () => {
     try {
-      const res = await fetch("http://localhost:8000/arbitrage")
+      const res = await fetch(`${API_URL}/arbitrage`)
       const json = await res.json()
       setData(json)
       setLastUpdated(new Date())

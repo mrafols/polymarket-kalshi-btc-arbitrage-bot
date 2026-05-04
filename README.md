@@ -35,7 +35,24 @@ This project includes:
 -   **Backend**: Python, FastAPI, Uvicorn, Requests
 -   **Frontend**: TypeScript, Next.js, Tailwind CSS, shadcn/ui, Lucide React
 
-## 📦 Installation
+## 🐳 Docker Quickstart (Recommended)
+
+The easiest way to run the full application — no local Python or Node.js required:
+
+```bash
+git clone https://github.com/CarlosIbCu/polymarket-kalshi-btc-arbitrage-bot.git
+cd polymarket-kalshi-btc-arbitrage-bot
+docker compose -f docker/docker-compose.yml up --build
+```
+
+That's it! The dashboard will be available at `http://localhost:3000` and the API at `http://localhost:8000`.
+
+To stop the application:
+```bash
+docker compose -f docker/docker-compose.yml down
+```
+
+## 📦 Manual Installation
 
 ### Prerequisites
 -   Python 3.9+

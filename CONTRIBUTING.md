@@ -46,6 +46,15 @@ This section guides you through submitting an enhancement suggestion, including 
     npm run dev
     ```
 
+### Alternative: Docker Setup
+
+If you prefer using Docker, you can run the entire stack with a single command:
+```bash
+docker compose -f docker/docker-compose.yml up --build
+```
+-   Backend will be available at `http://localhost:8000`
+-   Frontend will be available at `http://localhost:3000`
+
 ## 🎨 Styleguides
 
 ### Python
