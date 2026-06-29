@@ -3,8 +3,12 @@ services:
     build:
       context: ..
       dockerfile: docker/Dockerfile.backend
+    env_file:
+      - ../.env
     expose:
       - "8000"
+    volumes:
+      - trades_data:/app/trades
     networks:
       - app-network
     restart: unless-stopped
@@ -27,3 +31,5 @@ networks:
   app-network:
     driver: bridge
 
+volumes:
+  trades_data:
