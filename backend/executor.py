@@ -81,23 +81,26 @@ class ArbitrageExecutor:
             key_id      = os.getenv("KALSHI_KEY_ID", "")
             private_key = os.getenv("KALSHI_PRIVATE_KEY", "")
 
-            # Each Kalshi contract costs ~$0.01–1.00; `count` = number of $0.01 contracts
-            # For a $1 trade at say $0.47/contract: count = 1 (buys 1 contract worth $1 payout)
-            count = max(1, int(size))
+            # V2 API: side is "bid" (buy Yes) or "ask" (buy No)
+            # price is in fixed-point dollars ("0.4700"), not cents
+            # count is number of contracts (each pays $1 on win)
+            side = "bid" if leg.lower() == "yes" else "ask"
 
             body = json.dumps({
-                "ticker":          ticker,
-                "client_order_id": str(uuid.uuid4()),
-                "type":            "market",
-                "action":          "buy",
-                "side":            leg.lower(),   # "yes" or "no"
-                "count":           count,
+                "ticker":                      ticker,
+                "client_order_id":             str(uuid.uuid4()),
+                "side":                        side,
+                "count":                       "1",           # 1 contract = $1 payout on win
+                "price":                       f"{size:.4f}", # price in dollars, e.g. "0.4700"
+                "time_in_force":               "immediate_or_cancel",  # fast fill like market order
+                "self_trade_prevention_type":  "taker_at_cross",
             })
 
-            path = "/trade-api/v2/portfolio/orders"
-            base_url = "https://api.elections.kalshi.com"
+            # New v2 endpoint path
+            path     = "/portfolio/events/orders"
+            base_url = "https://api.elections.kalshi.com/trade-api/v2"
 
-            # Try RSA signing if key looks like a PEM private key
+            # RSA signing if key looks like PEM, else try Bearer token
             if "BEGIN" in private_key:
                 from cryptography.hazmat.primitives import hashes, serialization
                 from cryptography.hazmat.primitives.asymmetric import padding as asym_padding
@@ -113,8 +116,9 @@ class ArbitrageExecutor:
                     "Content-Type":            "application/json",
                 }
             else:
-                # Fall back: use private key as Bearer token
-                # ponytail: if this 401s, the user needs to provide a PEM RSA private key
+                # ponytail: Bearer fallback — will 401 if Kalshi requires RSA.
+                # Fix: generate RSA key pair in Kalshi Settings → API Keys,
+                # paste the PEM private key into KALSHI_PRIVATE_KEY in .env
                 headers = {
                     "Authorization": f"Bearer {private_key}",
                     "Content-Type":  "application/json",
