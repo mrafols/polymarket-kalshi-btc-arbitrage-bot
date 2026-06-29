@@ -1,24 +1,24 @@
-COMPOSE_FILE := docker/docker-compose.yml
+COMPOSE_DIR := docker
 
 .PHONY: up down build logs restart clean help
 
 up:
-	docker compose -f $(COMPOSE_FILE) up -d
+	cd $(COMPOSE_DIR) && docker compose up -d
 
 build:
-	docker compose -f $(COMPOSE_FILE) up --build -d
+	cd $(COMPOSE_DIR) && docker compose up --build -d
 
 down:
-	docker compose -f $(COMPOSE_FILE) down
+	cd $(COMPOSE_DIR) && docker compose down
 
 logs:
-	docker compose -f $(COMPOSE_FILE) logs -f
+	cd $(COMPOSE_DIR) && docker compose logs -f
 
 restart:
-	docker compose -f $(COMPOSE_FILE) restart
+	cd $(COMPOSE_DIR) && docker compose restart
 
 clean:
-	docker compose -f $(COMPOSE_FILE) down --rmi all --volumes --remove-orphans
+	cd $(COMPOSE_DIR) && docker compose down --rmi all --volumes --remove-orphans
 
 help:
 	@echo "Usage: make [target]"
