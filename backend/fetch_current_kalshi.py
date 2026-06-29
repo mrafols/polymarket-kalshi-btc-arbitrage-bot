@@ -65,12 +65,13 @@ def fetch_kalshi_data_struct():
             strike = parse_strike(m.get('subtitle', ''))
             if strike > 0:
                 market_data.append({
-                    'strike': strike,
-                    'yes_bid': m.get('yes_bid', 0),
-                    'yes_ask': m.get('yes_ask', 0),
-                    'no_bid': m.get('no_bid', 0),
-                    'no_ask': m.get('no_ask', 0),
-                    'subtitle': m.get('subtitle')
+                    'ticker':   m.get('ticker', ''),
+                    'strike':   strike,
+                    'yes_bid':  m.get('yes_bid', 0),
+                    'yes_ask':  m.get('yes_ask', 0),
+                    'no_bid':   m.get('no_bid', 0),
+                    'no_ask':   m.get('no_ask', 0),
+                    'subtitle': m.get('subtitle'),
                 })
                 
         # Sort by strike price

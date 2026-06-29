@@ -3,3 +3,5 @@ uvicorn>=0.20.0
 requests>=2.31.0
 pytz>=2023.3
 python-dotenv>=1.0.0
+py-clob-client>=0.17.0
+cryptography>=41.0.0

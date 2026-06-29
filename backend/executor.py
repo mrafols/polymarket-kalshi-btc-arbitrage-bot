@@ -1,4 +1,4 @@
-import os, json, threading, datetime, time
+import os, json, threading, datetime, time, uuid
 from concurrent.futures import ThreadPoolExecutor
 
 DRY_RUN          = os.getenv("DRY_RUN", "true").lower() == "true"
@@ -48,22 +48,89 @@ class ArbitrageExecutor:
     # Leg executors
     # ------------------------------------------------------------------ #
 
-    def _exec_polymarket(self, leg, size):
+    def _exec_polymarket(self, leg, token_id, size):
         if DRY_RUN:
             return {"status": "dry_run", "platform": "polymarket", "leg": leg, "size": size}
-        # ponytail: production path — needs py-clob-client + Polygon private key.
-        # Install: pip install py-clob-client
-        # Upgrade path: set DRY_RUN=false and ensure POLYMARKET_PRIVATE_KEY is 64-char hex.
-        return {"status": "not_implemented", "platform": "polymarket",
-                "error": "Set DRY_RUN=false only after verifying private key and USDC balance."}
+        if not token_id:
+            return {"status": "error", "platform": "polymarket", "error": "no token_id"}
+        try:
+            from py_clob_client.client import ClobClient
+            from py_clob_client.clob_types import MarketOrderArgs
 
-    def _exec_kalshi(self, leg, size):
+            key = os.getenv("POLYMARKET_PRIVATE_KEY", "")
+            client = ClobClient(host="https://clob.polymarket.com", key=key, chain_id=137)
+            client.set_api_creds(client.create_or_derive_api_creds())
+
+            order_args = MarketOrderArgs(token_id=token_id, amount=size)
+            signed_order = client.create_market_order(order_args)
+            resp = client.post_order(signed_order)
+
+            order_id = resp.get("orderID") or resp.get("order_id", "?")
+            return {"status": "executed", "platform": "polymarket", "leg": leg, "order_id": order_id}
+        except Exception as e:
+            return {"status": "error", "platform": "polymarket", "error": str(e)}
+
+    def _exec_kalshi(self, leg, ticker, size):
         if DRY_RUN:
             return {"status": "dry_run", "platform": "kalshi", "leg": leg, "size": size}
-        # ponytail: production path — needs Kalshi REST API + RSA key signing.
-        # Upgrade path: set DRY_RUN=false and ensure KALSHI_KEY_ID + KALSHI_PRIVATE_KEY (PEM).
-        return {"status": "not_implemented", "platform": "kalshi",
-                "error": "Set DRY_RUN=false only after depositing USD and getting RSA key pair."}
+        if not ticker:
+            return {"status": "error", "platform": "kalshi", "error": "no ticker"}
+        try:
+            import requests, base64
+
+            key_id      = os.getenv("KALSHI_KEY_ID", "")
+            private_key = os.getenv("KALSHI_PRIVATE_KEY", "")
+
+            # Each Kalshi contract costs ~$0.01–1.00; `count` = number of $0.01 contracts
+            # For a $1 trade at say $0.47/contract: count = 1 (buys 1 contract worth $1 payout)
+            count = max(1, int(size))
+
+            body = json.dumps({
+                "ticker":          ticker,
+                "client_order_id": str(uuid.uuid4()),
+                "type":            "market",
+                "action":          "buy",
+                "side":            leg.lower(),   # "yes" or "no"
+                "count":           count,
+            })
+
+            path = "/trade-api/v2/portfolio/orders"
+            base_url = "https://api.elections.kalshi.com"
+
+            # Try RSA signing if key looks like a PEM private key
+            if "BEGIN" in private_key:
+                from cryptography.hazmat.primitives import hashes, serialization
+                from cryptography.hazmat.primitives.asymmetric import padding as asym_padding
+
+                ts = str(int(time.time() * 1000))
+                pem_key = serialization.load_pem_private_key(private_key.encode(), password=None)
+                msg = (ts + "POST" + path + body).encode()
+                sig = pem_key.sign(msg, asym_padding.PKCS1v15(), hashes.SHA256())
+                headers = {
+                    "KALSHI-ACCESS-KEY":       key_id,
+                    "KALSHI-ACCESS-SIGNATURE": base64.b64encode(sig).decode(),
+                    "KALSHI-ACCESS-TIMESTAMP": ts,
+                    "Content-Type":            "application/json",
+                }
+            else:
+                # Fall back: use private key as Bearer token
+                # ponytail: if this 401s, the user needs to provide a PEM RSA private key
+                headers = {
+                    "Authorization": f"Bearer {private_key}",
+                    "Content-Type":  "application/json",
+                }
+
+            resp = requests.post(base_url + path, data=body, headers=headers, timeout=10)
+
+            if resp.status_code in (200, 201):
+                data = resp.json()
+                order_id = data.get("order", {}).get("order_id", "?")
+                return {"status": "executed", "platform": "kalshi", "leg": leg, "order_id": order_id}
+            else:
+                return {"status": "error", "platform": "kalshi",
+                        "http_status": resp.status_code, "error": resp.text[:300]}
+        except Exception as e:
+            return {"status": "error", "platform": "kalshi", "error": str(e)}
 
     # ------------------------------------------------------------------ #
     # Public API
@@ -89,6 +156,8 @@ class ArbitrageExecutor:
             "kalshi_leg":          opportunity["kalshi_leg"],
             "poly_strike":         opportunity.get("poly_strike"),
             "kalshi_strike":       opportunity["kalshi_strike"],
+            "kalshi_ticker":       opportunity.get("kalshi_ticker", ""),
+            "poly_token_id":       opportunity.get("poly_token_id", ""),
             "total_cost":          opportunity["total_cost"],
             "margin":              opportunity["margin"],
             "size_usd":            TRADE_SIZE_USD,
@@ -96,8 +165,14 @@ class ArbitrageExecutor:
         }
 
         with ThreadPoolExecutor(max_workers=2) as pool:
-            pf = pool.submit(self._exec_polymarket, opportunity["poly_leg"], TRADE_SIZE_USD)
-            kf = pool.submit(self._exec_kalshi,     opportunity["kalshi_leg"], TRADE_SIZE_USD)
+            pf = pool.submit(self._exec_polymarket,
+                             opportunity["poly_leg"],
+                             opportunity.get("poly_token_id", ""),
+                             TRADE_SIZE_USD)
+            kf = pool.submit(self._exec_kalshi,
+                             opportunity["kalshi_leg"],
+                             opportunity.get("kalshi_ticker", ""),
+                             TRADE_SIZE_USD)
             trade["polymarket_result"] = pf.result()
             trade["kalshi_result"]     = kf.result()
 
@@ -106,7 +181,7 @@ class ArbitrageExecutor:
         if statuses <= ok:
             trade["outcome"] = "success"
         elif statuses & ok:
-            trade["outcome"] = "partial"   # ponytail: one leg failed, log for manual intervention
+            trade["outcome"] = "partial"   # ponytail: one leg failed — log for manual fix
         else:
             trade["outcome"] = "failed"
 
@@ -120,6 +195,7 @@ class ArbitrageExecutor:
     def get_status(self):
         trades    = self.get_trades()
         successes = [t for t in trades if t.get("outcome") == "success"]
+        partials  = [t for t in trades if t.get("outcome") == "partial"]
         profit    = sum(t.get("expected_profit_usd", 0) for t in successes)
         return {
             "dry_run":                   DRY_RUN,
@@ -128,6 +204,7 @@ class ArbitrageExecutor:
             "cooldown_seconds":          COOLDOWN_SECONDS,
             "total_trades":              len(trades),
             "successful_trades":         len(successes),
+            "partial_trades":            len(partials),
             "total_expected_profit_usd": round(profit, 4),
             "last_trade":                trades[-1] if trades else None,
         }

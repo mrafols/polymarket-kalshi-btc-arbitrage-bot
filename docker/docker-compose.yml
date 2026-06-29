@@ -5,8 +5,8 @@ services:
       dockerfile: docker/Dockerfile.backend
     env_file:
       - ../.env
-    expose:
-      - "8000"
+    ports:
+      - "8000:8000"
     volumes:
       - trades_data:/app/trades
     networks:

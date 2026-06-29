@@ -40,9 +40,10 @@ def detect_opportunities():
     if not poly_data or not kalshi_data:
         return response, []
 
-    poly_strike   = poly_data["price_to_beat"]
-    poly_up_cost  = poly_data["prices"].get("Up",   0.0)
+    poly_strike    = poly_data["price_to_beat"]
+    poly_up_cost   = poly_data["prices"].get("Up",   0.0)
     poly_down_cost = poly_data["prices"].get("Down", 0.0)
+    poly_token_ids = poly_data.get("token_ids", {})
 
     if poly_strike is None:
         response["errors"].append("Polymarket Strike is None")
@@ -62,28 +63,30 @@ def detect_opportunities():
         kalshi_strike   = km["strike"]
         kalshi_yes_cost = km["yes_ask"] / 100.0
         kalshi_no_cost  = km["no_ask"]  / 100.0
+        kalshi_ticker   = km.get("ticker", "")
 
         base = {
-            "poly_strike":  poly_strike,
-            "kalshi_strike": kalshi_strike,
-            "kalshi_yes":   kalshi_yes_cost,
-            "kalshi_no":    kalshi_no_cost,
-            "is_arbitrage": False,
-            "margin":       0,
+            "poly_strike":    poly_strike,
+            "kalshi_strike":  kalshi_strike,
+            "kalshi_ticker":  kalshi_ticker,
+            "kalshi_yes":     kalshi_yes_cost,
+            "kalshi_no":      kalshi_no_cost,
+            "is_arbitrage":   False,
+            "margin":         0,
         }
 
         def _check(poly_leg, kalshi_leg, poly_cost, kalshi_cost, type_label):
             total = poly_cost + kalshi_cost
-            check = {**base,
-                     "type":        type_label,
-                     "poly_leg":    poly_leg,
-                     "kalshi_leg":  kalshi_leg,
-                     "poly_cost":   poly_cost,
-                     "kalshi_cost": kalshi_cost,
-                     "total_cost":  total,
-                     "is_arbitrage": total < 1.00,
-                     "margin":      round(1.00 - total, 4) if total < 1.00 else 0}
-            return check
+            return {**base,
+                    "type":          type_label,
+                    "poly_leg":      poly_leg,
+                    "kalshi_leg":    kalshi_leg,
+                    "poly_token_id": poly_token_ids.get(poly_leg, ""),
+                    "poly_cost":     poly_cost,
+                    "kalshi_cost":   kalshi_cost,
+                    "total_cost":    total,
+                    "is_arbitrage":  total < 1.00,
+                    "margin":        round(1.00 - total, 4) if total < 1.00 else 0}
 
         if poly_strike > kalshi_strike:
             c = _check("Down", "Yes", poly_down_cost, kalshi_yes_cost, "Poly>Kalshi")
