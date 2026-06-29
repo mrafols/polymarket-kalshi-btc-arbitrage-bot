@@ -96,9 +96,9 @@ class ArbitrageExecutor:
                 "self_trade_prevention_type":  "taker_at_cross",
             })
 
-            # New v2 endpoint path
-            path     = "/portfolio/events/orders"
-            base_url = "https://api.elections.kalshi.com/trade-api/v2"
+            # New v2 endpoint path (full path is needed for signature string)
+            path     = "/trade-api/v2/portfolio/events/orders"
+            base_url = "https://api.elections.kalshi.com"
 
             # RSA signing if key looks like PEM, else try Bearer token
             if "BEGIN" in private_key:
@@ -107,8 +107,19 @@ class ArbitrageExecutor:
 
                 ts = str(int(time.time() * 1000))
                 pem_key = serialization.load_pem_private_key(private_key.encode(), password=None)
-                msg = (ts + "POST" + path + body).encode()
-                sig = pem_key.sign(msg, asym_padding.PKCS1v15(), hashes.SHA256())
+                
+                # Message format: timestamp + HTTP_METHOD + path
+                msg = (ts + "POST" + path + body).encode("utf-8")
+                
+                # Sign using RSA-PSS with SHA256 (Kalshi spec)
+                sig = pem_key.sign(
+                    msg,
+                    asym_padding.PSS(
+                        mgf=asym_padding.MGF1(hashes.SHA256()),
+                        salt_length=asym_padding.PSS.DIGEST_LENGTH
+                    ),
+                    hashes.SHA256()
+                )
                 headers = {
                     "KALSHI-ACCESS-KEY":       key_id,
                     "KALSHI-ACCESS-SIGNATURE": base64.b64encode(sig).decode(),
