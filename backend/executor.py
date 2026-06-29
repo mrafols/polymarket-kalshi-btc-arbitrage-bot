@@ -108,8 +108,8 @@ class ArbitrageExecutor:
                 ts = str(int(time.time() * 1000))
                 pem_key = serialization.load_pem_private_key(private_key.encode(), password=None)
                 
-                # Message format: timestamp + HTTP_METHOD + path
-                msg = (ts + "POST" + path + body).encode("utf-8")
+                # Message format: timestamp + HTTP_METHOD + path (No body!)
+                msg = (ts + "POST" + path).encode("utf-8")
                 
                 # Sign using RSA-PSS with SHA256 (Kalshi spec)
                 sig = pem_key.sign(
